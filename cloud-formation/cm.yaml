@@ -1,0 +1,68 @@
+Metadata:
+  License: Apache-2.0
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation template to launch CDH cluster'
+Parameters:
+  CMInstanceType:
+    Description: Enter a valid instance type for your selected region.
+    Type: String
+    Default: 'm4.large'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for Cloudera Cluster.
+  CMSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for Cloudera Manager.
+  SSHKeyName:
+    Description: The EC2 Key Pair to allow SSH access to these instances.
+    Type: AWS::EC2::KeyPair::KeyName
+Mappings:
+  AWSRegionToCDHAMI:
+    cn-northwest-1:
+      CMAMIID: ami-0c077fa75024e977d
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: '0.0.0.0/0'
+  InboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: -1
+      SourceSecurityGroupId: !GetAtt [InstanceSecurityGroup, GroupId]
+      GroupId: !GetAtt [InstanceSecurityGroup, GroupId]
+  CMInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: !FindInMap [AWSRegionToCDHAMI, !Ref 'AWS::Region', CMAMIID]
+      InstanceType: !Ref CMInstanceType
+      KeyName: !Ref 'SSHKeyName'
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+      NetworkInterfaces: 
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          GroupSet: [!Ref 'InstanceSecurityGroup']
+          SubnetId: !Ref CMSubnetId
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 50
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          wget https://s3.cn-northwest-1.amazonaws.com.cn/whe-pub/cloudera/scripts/cdh-bootstrap.sh
+          chmod +x ./cdh-bootstrap.sh
+          ./cdh-bootstrap.sh > /var/log/cdh-bootstrap.log
+          rm -f ./cdh-bootstrap.sh
+Outputs:
+  PublicIP:
+    Description: Public IP address of the newly created EC2 instance
+    Value: !GetAtt [CMInstance, PublicIp]

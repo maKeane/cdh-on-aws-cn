@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Metadata: 
+  License: Apache-2.0
+Description: 'AWS CloudFormation to create mysql database for CDH'
+Parameters:
+  DBName:
+    Default: cdhdb
+    Description: The database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBUser:
+    Default: cmadmin
+    Description: The database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBPassword:
+    NoEcho: 'true'
+    Description: The database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+  DBInstanceType:
+    Description: DB instance type.
+    Type: String
+    Default: db.r4.large
+    AllowedValues:
+      - db.t2.small
+      - db.t2.medium
+      - db.r4.large
+      - db.r4.xlarge
+      - db.r4.2xlarge
+      - db.r4.4xlarge
+      - db.r4.8xlarge
+      - db.r4.16xlarge
+  DBVpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for DB.
+  DBSubnets:
+    Description: The subnets where database can be created.
+    Type: List<AWS::EC2::Subnet::Id>
+Resources:
+  CMDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable access to DB in VPC
+      VpcId: !Ref DBVpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: '0.0.0.0/0'
+  CMDBSubnetGroup: 
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "Subnet Group for Clouder Cluster Manager Database"
+      SubnetIds: !Ref DBSubnets
+  CMDBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      DatabaseName: !Ref 'DBName'
+      Engine: 'aurora'
+      DBSubnetGroupName: !Ref CMDBSubnetGroup
+      MasterUsername: !Ref 'DBUser'
+      MasterUserPassword: !Ref 'DBPassword'
+      VpcSecurityGroupIds: [!Ref CMDBSecurityGroup]
+  CMDBInstance:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      Engine: 'aurora'
+      DBClusterIdentifier: !Ref CMDBCluster
+      DBSubnetGroupName: !Ref CMDBSubnetGroup
+      DBInstanceClass: !Ref DBInstanceType
+Outputs:
+  DBEndpoint:
+    Description: DB cluster endpoint
+    Value: !GetAtt [CMDBCluster, Endpoint.Address]
+  DBPort:
+    Description: DB cluster port
+    Value: !GetAtt [CMDBCluster, Endpoint.Port]
