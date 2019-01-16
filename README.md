@@ -16,27 +16,11 @@ TODO: 架构图
 7. Lambda函数，执行集群创建，部署，和终止。
 
 ## 部署流程
-1. 安装Packer并创建CM和CDH节点AMI。
+1. (可选)安装Packer并创建CM和CDH节点AMI。
 ```bash
   packer build -var "aws_access_key=$AK" -var "aws_secret_key=$SK" cm-packer.json
   packer build -var "aws_access_key=$AK" -var "aws_secret_key=$SK" node-packer.json
 ```
-2. 准备VPC及相应的子网。
-3. 创建RDS Aurora for MySQL数据库, 参考CloudFormation模板 cloud-formation/rds.yaml
-4. 创建CDH需要的数据库和账户，并将配置信息写入SSM Parameter Store中。
-```sql
-mysql -h${DBEndpoint} -u${DBUser} -p${DBAdminPassword} <<'EOF'
-CREATE DATABASE metastore DEFAULT CHARACTER SET utf8;
-CREATE DATABASE hue DEFAULT CHARACTER SET utf8;
-CREATE DATABASE oozie DEFAULT CHARACTER SET utf8;
-CREATE DATABASE amon DEFAULT CHARACTER SET utf8;
-GRANT ALL ON metastore.* TO 'hive'@'%' IDENTIFIED BY 'hivepwd';
-GRANT ALL ON hue.* TO 'hue'@'%' IDENTIFIED BY 'huepwd';
-GRANT ALL ON oozie.* TO 'oozie'@'%' IDENTIFIED BY 'ooziepwd';
-GRANT ALL ON amon.* TO 'amon'@'%' IDENTIFIED BY 'amonpwd';
-flush privileges;
-EOF
-```
-5. 创建CDH节点所需的Launch Template。
-6. 创建Lambda函数
-7. 创建CloudWatch Event以触发Lambda
+2. 准备VPC及相应的子网，建议创建3个私有子网，至少一个公有子网。
+3. 创建RDS Aurora for MySQL数据库以及必要的安全组等组件, 运行CloudFormation模板 cloud-formation/cdh-context.yaml. 注意：运行这个CloudFromation是请确保用独立的IAM Role运行，直接用当前登录用户运行会有错误。
+4. 创建CDH节点，运行CloudFormation模板 cloud-formation/cdh-cluster.yaml。请确保选择的EC2 Fleet子网有三个。

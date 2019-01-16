@@ -113,6 +113,12 @@
         {
           "refName": "impala-IMPALAD-BASE",
           "roleType": "IMPALAD",
+          "configs": [
+            {
+              "name": "impalad_memory_limit",
+              "value": "1073741824"
+            }
+          ],
           "base": true
         },
         {
@@ -151,6 +157,12 @@
     {
       "refName": "hdfs",
       "serviceType": "HDFS",
+      "serviceConfigs": [
+        {
+          "name": "dfs_replication",
+          "value": "2"
+        }
+      ],
       "roleConfigGroups": [
         {
           "refName": "hdfs-DATANODE-BASE",
@@ -171,6 +183,11 @@
           "refName": "hdfs-SECONDARYNAMENODE-BASE",
           "roleType": "SECONDARYNAMENODE",
           "base": true
+        },
+        {
+          "refName": "hdfs-GATEWAY-BASE",
+          "roleType": "GATEWAY",
+          "base": true
         }
       ]
     }
@@ -182,7 +199,8 @@
       "roleConfigGroupsRefNames": [
         "hive-GATEWAY-BASE",
         "oozie-OOZIE_SERVER-BASE",
-        "zookeeper-SERVER-BASE"
+        "zookeeper-SERVER-BASE",
+        "hdfs-GATEWAY-BASE"
       ]
     },
     {
