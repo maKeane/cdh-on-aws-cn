@@ -136,6 +136,12 @@
     {
       "refName": "yarn",
       "serviceType": "YARN",
+      "serviceConfigs": [
+        {
+          "name": "yarn_core_site_safety_valve",
+          "value": "<property><name>fs.s3a.endpoint</name><value>s3.cn-northwest-1.amazonaws.com.cn</value></property>"
+        }
+      ],
       "roleConfigGroups": [
         {
           "refName": "yarn-RESOURCEMANAGER-BASE",
@@ -158,6 +164,10 @@
       "refName": "hdfs",
       "serviceType": "HDFS",
       "serviceConfigs": [
+        {
+          "name": "core_site_safety_valve",
+          "value": "<property><name>fs.s3a.endpoint</name><value>s3.cn-northwest-1.amazonaws.com.cn</value></property>"
+        },
         {
           "name": "dfs_replication",
           "value": "2"
