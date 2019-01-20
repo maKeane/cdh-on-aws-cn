@@ -122,10 +122,8 @@ Resources:
           mysql -h${DBEndpoint} -u${DBUser} -p${DBAdminPassword} <<'EOF'
           DROP DATABASE IF EXISTS amon;
           CREATE DATABASE amon DEFAULT CHARACTER SET utf8;
-          DROP DATABASE IF EXISTS metastore;
-          CREATE DATABASE metastore DEFAULT CHARACTER SET utf8;
-          DROP DATABASE IF EXISTS hue;
-          CREATE DATABASE hue DEFAULT CHARACTER SET utf8;
+          CREATE DATABASE IF NOT EXISTS metastore DEFAULT CHARACTER SET utf8;
+          CREATE DATABASE IF NOT EXISTS hue DEFAULT CHARACTER SET utf8;
           DROP DATABASE IF EXISTS oozie;
           CREATE DATABASE oozie DEFAULT CHARACTER SET utf8;
           GRANT ALL ON metastore.* TO 'hive'@'%' IDENTIFIED BY '${DBHivePassword}';
