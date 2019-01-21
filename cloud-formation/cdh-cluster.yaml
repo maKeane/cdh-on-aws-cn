@@ -59,13 +59,24 @@ Parameters:
     Description: The name of the ZIP package
     Type: String
     Default: cloudera/scripts/lt_lambda.zip
-  TotalTargetCapacity:
+  CDHNodesCapacity:
     Description: 'Target number of spot instances'
     Type: Number
     Default: 4
+    MinValue: 4
   FleetSubnets:
     Description: The subnets where ec2 fleet can be created.
     Type: List<AWS::EC2::Subnet::Id>
+  CMVolumeSize:
+    Description: 'Volume size of CM instance'
+    Type: Number
+    Default: 50
+    MinValue: 20
+  CDHNodeVolumeSize:
+    Description: 'Volume size of each CDH node'
+    Type: Number
+    Default: 50
+    MinValue: 20
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -75,12 +86,14 @@ Metadata:
           - VpcId
           - CMSubnetId
           - CMInstanceType
+          - CMVolumeSize
           - SSHKeyName
       - Label:
           default: "CDH Node Parameters"
         Parameters:
           - FleetSubnets
-          - TotalTargetCapacity
+          - CDHNodesCapacity
+          - CDHNodeVolumeSize
           - LaunchTemplateLambdaS3Bucket
           - LaunchTemplateLambdaS3Key
 Mappings:
@@ -108,7 +121,7 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/sda1
           Ebs:
-            VolumeSize: 100
+            VolumeSize: !Ref CMVolumeSize
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
@@ -160,7 +173,7 @@ Resources:
 
           ### wait for CDH host ready ###
           echo -n "Waiting for CDH hosts ready "
-          while [ `curl -s http://admin:admin@localhost:7180/api/v12/hosts?view=full | jq -r '[.items[] | select(.healthSummary == "GOOD")] | length'` -lt 4 ];
+          while [ `curl -s http://admin:admin@localhost:7180/api/v12/hosts?view=full | jq -r '[.items[] | select(.healthSummary == "GOOD")] | length'` -lt ${CDHNodesCapacity} ];
               do sleep 5 && echo -n .;
           done
           sleep 10
@@ -239,7 +252,7 @@ Resources:
             Ebs:
               DeleteOnTermination: true
               VolumeType: "gp2"
-              VolumeSize: 100
+              VolumeSize: !Ref CDHNodeVolumeSize
           TagSpecifications:
           - ResourceType: instance
             Tags:
@@ -285,7 +298,7 @@ Resources:
         - InstanceType: m4.xlarge
           SubnetId: !Select [2, !Ref FleetSubnets]
       TargetCapacitySpecification:
-        TotalTargetCapacity: !Ref 'TotalTargetCapacity'
+        TotalTargetCapacity: !Ref 'CDHNodesCapacity'
         DefaultTargetCapacityType: spot
       TerminateInstancesWithExpiration: true
       Type: maintain
