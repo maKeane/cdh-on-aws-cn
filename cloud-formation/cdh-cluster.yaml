@@ -124,7 +124,8 @@ Resources:
             VolumeSize: !Ref CMVolumeSize
       UserData:
         Fn::Base64: !Sub |
-          #!/bin/bash
+          #!/bin/bash -xe
+          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
 
           ### stop cloudera server and agent at first ###
           systemctl stop cloudera-scm-agent
@@ -160,7 +161,7 @@ Resources:
           ### wait for cloudera-scm-server ready ###
           echo -n "Waiting for cloudera-scm-server ready "
           while ! curl --output /dev/null --silent --head --fail http://localhost:7180;
-              do sleep 5 && echo -n .;
+              do sleep 5;
           done;
           sleep 10
           echo " done"
@@ -174,7 +175,7 @@ Resources:
           ### wait for CDH host ready ###
           echo -n "Waiting for CDH hosts ready "
           while [ `curl -s http://admin:admin@localhost:7180/api/v12/hosts?view=full | jq -r '[.items[] | select(.healthSummary == "GOOD")] | length'` -lt ${CDHNodesCapacity} ];
-              do sleep 5 && echo -n .;
+              do sleep 5;
           done
           sleep 10
           echo " done"
@@ -261,7 +262,9 @@ Resources:
           UserData:
               Fn::Base64: !Sub 
               - |
-                #!/bin/bash
+                #!/bin/bash -xe
+                exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+
                 systemctl stop cloudera-scm-agent
                 rm -f /var/lib/cloudera-scm-agent/uuid
                 rm -f /var/lib/cloudera-scm-agent/cm_guid
@@ -269,7 +272,7 @@ Resources:
 
                 #wait for CM host ready
                 while ! curl --output /dev/null --silent --head http://${CMHostName}:7182;
-                    do sleep 5 && echo -n .;
+                    do sleep 5;
                 done;
                 sleep 10
 

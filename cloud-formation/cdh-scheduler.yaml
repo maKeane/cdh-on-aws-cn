@@ -1,0 +1,228 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS CloudFormation to create scheduler to launch CDH cluster'
+Parameters:
+  CDHClusterName:
+    Description: The stack name of CHD cluster.
+    Type: String
+    Default: 'CDH-Cluster1'
+  CDHClusterTemplateURL:
+    Description: S3 URL of CHD cluster template.
+    Type: String
+    Default: 'https://s3.cn-northwest-1.amazonaws.com.cn/whe-pub/cloudera/scripts/cdh-cluster.yaml'
+  CMInstanceType:
+    Description: Enter a valid instance type for your selected region.
+    Type: String
+    Default: 'm4.xlarge'
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for Cloudera Cluster.
+  CMSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet for Cloudera Manager.
+  SSHKeyName:
+    Description: The EC2 Key Pair to allow SSH access to these instances.
+    Type: AWS::EC2::KeyPair::KeyName
+  FleetSubnets:
+    Description: The subnets where ec2 fleet can be created.
+    Type: List<AWS::EC2::Subnet::Id>
+  LaunchScheduleExpression:
+    Description: Schedule to launch CDH cluster.
+    Type: String
+    Default: 'cron(0 15 * * ? *)'
+  DeleteScheduleExpression:
+    Description: Schedule to delete CDH cluster.
+    Type: String
+    Default: 'cron(0 19 * * ? *)'
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "CDH Cluster Parameters"
+        Parameters:
+          - CDHClusterName
+          - CDHClusterTemplateURL
+          - VpcId
+          - SSHKeyName
+          - CMSubnetId
+          - FleetSubnets
+      - Label:
+          default: "Cluster Schedule"
+        Parameters:
+          - LaunchScheduleExpression
+          - DeleteScheduleExpression
+Resources:
+  CFNExecRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns: ['arn:aws-cn:iam::aws:policy/service-role/AmazonEC2SpotFleetRole']
+      Policies:
+        - PolicyName: LambdaCFNPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'ssm:GetParameters'
+                  - 'ec2:*'
+                  - 'iam:*'
+                  - 'lambda:*'
+                Resource: '*'
+  LaunchLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: LambdaCFNPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'cloudformation:CreateStack'
+                  - 'ssm:GetParameters'
+                  - 'iam:PassRole'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+  LaunchCFNFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: !Sub
+        - |
+          import boto3
+          import traceback
+          client = boto3.client('cloudformation')
+          def handler(event, context):
+              try:
+                response = client.create_stack(
+                  StackName='${CDHClusterName}',
+                  TemplateURL='${CDHClusterTemplateURL}',
+                  Parameters=[
+                    {
+                      'ParameterKey': 'CMInstanceType',
+                      'ParameterValue': '${CMInstanceType}'
+                    },
+                    {
+                      'ParameterKey': 'VpcId',
+                      'ParameterValue': '${VpcId}'
+                    },
+                    {
+                      'ParameterKey': 'CMSubnetId',
+                      'ParameterValue': '${CMSubnetId}'
+                    },
+                    {
+                      'ParameterKey': 'SSHKeyName',
+                      'ParameterValue': '${SSHKeyName}'
+                    },
+                    {
+                      'ParameterKey': 'FleetSubnets',
+                      'ParameterValue': '${FleetSubnetsStr}'
+                    }
+                  ],
+                  Capabilities=['CAPABILITY_IAM'],
+                  RoleARN='${CFNExecRoleArn}'
+                )
+              except Exception as e:
+                traceback.print_exc()
+        - {
+          FleetSubnetsStr: !Join [',', !Ref FleetSubnets],
+          CFNExecRoleArn: !GetAtt CFNExecRole.Arn
+          }
+      Handler: index.handler
+      Runtime: python3.6
+      Role: !GetAtt LaunchLambdaRole.Arn
+      Timeout: 900
+  ScheduledLaunchRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: 'Scheduled rule to launch CDH cluster'
+      ScheduleExpression: !Ref LaunchScheduleExpression
+      State: 'ENABLED'
+      Targets: 
+        - Arn: !GetAtt LaunchCFNFunction.Arn
+          Id: 'TargetFunctionV1'
+  PermissionForEventsToInvokeLaunchLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref LaunchCFNFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt ScheduledLaunchRule.Arn
+  DeleteLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: LambdaCFNPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'cloudformation:DeleteStack'
+                  - 'iam:PassRole'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+  DeleteCFNFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: !Sub
+        - |
+          import boto3
+          import traceback
+          client = boto3.client('cloudformation')
+          def handler(event, context):
+              try:
+                response = client.delete_stack(StackName='${CDHClusterName}', RoleARN='${CFNExecRoleArn}')
+              except Exception as e:
+                traceback.print_exc()
+        - {
+          CFNExecRoleArn: !GetAtt CFNExecRole.Arn
+          }
+      Handler: index.handler
+      Runtime: python3.6
+      Role: !GetAtt DeleteLambdaRole.Arn
+      Timeout: 900
+  ScheduledDeleteRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: 'Scheduled rule to delete CDH cluster'
+      ScheduleExpression: !Ref DeleteScheduleExpression
+      State: 'ENABLED'
+      Targets: 
+        - Arn: !GetAtt DeleteCFNFunction.Arn
+          Id: 'TargetFunctionV1'
+  PermissionForEventsToInvokeDeleteLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref DeleteCFNFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt ScheduledDeleteRule.Arn
