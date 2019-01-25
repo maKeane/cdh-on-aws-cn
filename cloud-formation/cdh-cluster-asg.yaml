@@ -234,35 +234,32 @@ Resources:
             - {
               CMHostName: !GetAtt CMInstance.PrivateDnsName
               }
-  CDHEC2Fleet:
-    Type: AWS::EC2::EC2Fleet
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
-      SpotOptions:
-        AllocationStrategy: diversified
-        InstanceInterruptionBehavior: stop
-      ExcessCapacityTerminationPolicy: termination
-      LaunchTemplateConfigs:
-      - LaunchTemplateSpecification:
-          LaunchTemplateId: !Ref CDHLaunchTemplate
-          Version: !GetAtt CDHLaunchTemplate.LatestVersionNumber
-        Overrides:
-        - InstanceType: m4.xlarge
-          SubnetId: !Select [0, !Ref FleetSubnets]
-        - InstanceType: m4.xlarge
-          SubnetId: !Select [1, !Ref FleetSubnets]
-        - InstanceType: m4.xlarge
-          SubnetId: !Select [2, !Ref FleetSubnets]
-      TargetCapacitySpecification:
-        TotalTargetCapacity: !Ref 'CDHNodesCapacity'
-        DefaultTargetCapacityType: spot
-      TerminateInstancesWithExpiration: true
-      Type: maintain
-      ReplaceUnhealthyInstances: true
-      TagSpecifications:
-      - ResourceType: fleet
-        Tags:
-        - Key: Name
-          Value: CDH Node Fleet
+      MixedInstancesPolicy:
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref CDHLaunchTemplate
+            Version: !GetAtt CDHLaunchTemplate.LatestVersionNumber
+          Overrides:
+            - InstanceType: m4.xlarge
+            - InstanceType: r4.xlarge
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: 0
+      MinSize: 1
+      MaxSize: 10
+      DesiredCapacity: !Ref 'CDHNodesCapacity'
+      VPCZoneIdentifier: !Ref FleetSubnets
+  ScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 80
 Outputs:
   PublicIP:
     Description: Public IP address of the newly created EC2 instance
